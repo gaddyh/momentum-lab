@@ -50,3 +50,21 @@ git branch -M main
 git remote add origin git@github.com:YOUR_USERNAME/momentum-lab.git
 git push -u origin main
 ```
+
+## Alpaca hourly historical bars (experimental)
+
+Store credentials **locally** in an ignored `.env` file:
+
+```dotenv
+ALPACA_API_KEY_ID=your_key
+ALPACA_API_SECRET_KEY=your_secret
+```
+
+Load them before invoking the CLI (the package does not automatically load `.env`):
+
+```bash
+set -a; source .env; set +a
+momentum-lab fetch-alpaca --symbol RKLB --start 2025-01-01 --end 2025-04-01 --feed iex --out data/raw/RKLB_hour.csv
+```
+
+End time is **exclusive**. An IEX response is not consolidated whole-market volume; SIP entitlement may be required for representative bars. This adds **data collection only**: the existing `mine` command assumes 1-minute bars. Do **not** mine these hourly bars with the minute-specific miner. Next milestone: bar-size-aware retrospective miner with realistic hourly entry timing and unknown within-bar barrier ordering.
