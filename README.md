@@ -39,6 +39,32 @@ CSV/Parquet: `ts,symbol,open,high,low,close,volume`. UTC timestamps at **start**
 
 Hourly candles cannot resolve a two-minute execution delay. The hourly miner therefore enters at the first subsequent candle open and records the actual delay; this is a coarse research proxy, not a two-minute execution simulation. The 60-hour horizon is elapsed calendar time, including nights and weekends, while missing bars never prove that a barrier was not crossed.
 
+### Market-wide pilot (Momentum Lab 006)
+
+Create and freeze a reproducible universe snapshot. Alpaca Assets is only an asset-discovery source; it does not rank historical liquidity. A size-limited snapshot therefore requires a separate CSV containing an explicitly named liquidity metric such as `dollar_volume`:
+
+```bash
+momentum-lab universe --out data/universes --limit 500 --liquidity-file liquidity.csv
+```
+
+Without `--liquidity-file`, the command creates an unranked asset-discovery snapshot. The generated snapshot records its source, selection criteria, timestamp, and survivorship-bias warning. Current Alpaca active assets are not a point-in-time or delisted universe and must not be described as representative.
+
+Download immutable monthly chunks and resume safely after interruption:
+
+```bash
+momentum-lab fetch-market --universe data/universes/universe_<snapshot-id>.csv \
+  --start 2025-01-01 --end 2025-04-01 --feed iex --out data/raw/market
+```
+
+Each chunk is checksummed and recorded in `manifest.json`; `--force-refresh` is required to replace an existing chunk. Run the unchanged Golden Miner across the frozen universe:
+
+```bash
+momentum-lab mine-market --universe data/universes/universe_<snapshot-id>.csv \
+  --data data/raw/market --out results/market-pilot
+```
+
+The market-wide output includes all candidate outcomes, opportunity windows, retrospective rankings, run provenance, and `research_summary.json`. The summary reports Golden Opportunity counts, failed/censored/ambiguous cases, symbol and calendar-period distributions, window durations, and time-to-target. Rankings are hindsight-only and are not trading signals.
+
 **Do not interpret the fraction of winning candidate minutes or hours as trade win-rate**: nearby decisions share the same future price path and are correlated observations. Labels do not constitute entry signals.
 
 ## Modules

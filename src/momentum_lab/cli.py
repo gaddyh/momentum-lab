@@ -9,7 +9,15 @@ from pathlib import Path
 import pandas as pd
 
 from momentum_lab.collectors.alpaca import fetch_alpaca
+from momentum_lab.data_lake import download_chunks, read_chunks
 from momentum_lab.miners.golden import fetch_massive, load_bars, mine_opportunities
+from momentum_lab.research.marketwide import mine_market
+from momentum_lab.universe import (
+    discover_assets,
+    load_snapshot,
+    screen_by_liquidity,
+    write_snapshot,
+)
 
 
 def _summary(events: pd.DataFrame, windows: pd.DataFrame) -> dict:
@@ -80,6 +88,34 @@ def main():
     for flag in ("symbol", "start", "end", "out"):
         alpaca.add_argument(f"--{flag}", required=True)
     alpaca.add_argument("--feed", choices=("iex", "sip"), default="iex")
+    universe = subs.add_parser("universe", help="Create a frozen universe snapshot")
+    universe.add_argument("--out", required=True)
+    universe.add_argument("--input", help="Imported asset CSV; otherwise discover from Alpaca Assets")
+    universe.add_argument("--liquidity-file", help="CSV with symbol and dollar_volume metric")
+    universe.add_argument("--limit", type=int)
+    universe.add_argument("--source", default="alpaca-assets")
+
+    lake = subs.add_parser("fetch-market", help="Download frozen-universe monthly hourly chunks")
+    lake.add_argument("--universe", required=True)
+    lake.add_argument("--start", required=True)
+    lake.add_argument("--end", required=True)
+    lake.add_argument("--out", required=True)
+    lake.add_argument("--feed", choices=("iex", "sip"), default="iex")
+    lake.add_argument("--force-refresh", action="store_true")
+
+    market = subs.add_parser("mine-market", help="Mine a frozen universe data lake")
+    market.add_argument("--universe", required=True)
+    market.add_argument("--data", required=True)
+    market.add_argument("--out", required=True)
+    market.add_argument("--feed", choices=("iex", "sip"), default="iex")
+    market.add_argument("--metadata")
+    market.add_argument("--target", type=float, default=.20)
+    market.add_argument("--stop", type=float, default=.08)
+    market.add_argument("--latency", type=int, default=2)
+    market.add_argument("--horizon-hours", type=int, default=60)
+    market.add_argument("--min-window", type=int, default=30)
+    market.add_argument("--candidate-step", type=int, default=1)
+
     mine = subs.add_parser("mine", help="Mine retrospective opportunity windows")
     mine.add_argument("--input", required=True)
     mine.add_argument("--out", default="results")
@@ -102,6 +138,32 @@ def main():
     if args.command == "fetch-alpaca":
         data = fetch_alpaca(args.symbol, args.start, args.end, Path(args.out), feed=args.feed)
         print(f"Downloaded {len(data)} hourly bars for {args.symbol} ({args.feed})")
+        return
+    if args.command == "universe":
+        assets = pd.read_csv(args.input) if args.input else discover_assets()
+        liquidity = pd.read_csv(args.liquidity_file) if args.liquidity_file else None
+        selected, criteria = screen_by_liquidity(assets, liquidity, args.limit)
+        sid, path = write_snapshot(selected, Path(args.out), criteria, args.source,
+                                   survivorship_bias=not bool(args.input))
+        print(f"Created frozen universe {sid}: {len(selected)} symbols at {path}")
+        return
+    if args.command == "fetch-market":
+        universe, metadata = load_snapshot(Path(args.universe))
+        chunks = download_chunks(universe.symbol, args.start, args.end, Path(args.out), feed=args.feed,
+                                 force_refresh=args.force_refresh)
+        print(f"Processed {len(chunks)} manifest chunks for universe {metadata.get('snapshot_id')}")
+        return
+    if args.command == "mine-market":
+        universe, metadata = load_snapshot(Path(args.universe))
+        bars_by_symbol = {symbol: read_chunks(Path(args.data), symbol, feed=args.feed) for symbol in universe.symbol}
+        params = {"timeframe": "1h", "target_pct": args.target, "stop_pct": args.stop,
+                  "horizon_hours": args.horizon_hours, "latency_minutes": args.latency,
+                  "candidate_step": args.candidate_step, "min_window_min": args.min_window}
+        manifest_path = Path(args.data) / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())["chunks"] if manifest_path.exists() else []
+        result = mine_market(bars_by_symbol, Path(args.out), metadata["snapshot_id"], params,
+                             Path(args.metadata) if args.metadata else None, manifest)
+        print(f"Mined {len(result['events'])} candidates and {len(result['windows'])} opportunity windows")
         return
 
     bars = load_bars(Path(args.input), args.symbol)
