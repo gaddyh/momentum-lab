@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import pandas as pd
 from momentum_lab.miners.golden import fetch_massive, load_bars, mine_symbol
+from momentum_lab.collectors.alpaca import fetch_alpaca
 
 def main():
     parser = argparse.ArgumentParser(prog="momentum-lab")
@@ -11,6 +12,10 @@ def main():
     fetch = subs.add_parser("fetch", help="Fetch minute bars using Massive")
     for flag in ("symbol", "start", "end", "out"):
         fetch.add_argument(f"--{flag}", required=True)
+    alpaca = subs.add_parser("fetch-alpaca", help="Fetch historical hourly bars from Alpaca")
+    for flag in ("symbol", "start", "end", "out"):
+        alpaca.add_argument(f"--{flag}", required=True)
+    alpaca.add_argument("--feed", choices=("iex", "sip"), default="iex")
     mine = subs.add_parser("mine", help="Mine retrospective gold opportunity windows")
     mine.add_argument("--input", required=True)
     mine.add_argument("--out", default="results")
@@ -25,6 +30,10 @@ def main():
         if not key:
             parser.error("Set MASSIVE_API_KEY first")
         fetch_massive(args.symbol, args.start, args.end, key, Path(args.out))
+        return
+    if args.command == "fetch-alpaca":
+        data = fetch_alpaca(args.symbol, args.start, args.end, Path(args.out), feed=args.feed)
+        print(f"Downloaded {len(data)} hourly bars for {args.symbol} ({args.feed})")
         return
     df = load_bars(Path(args.input), args.symbol)
     out = Path(args.out)
