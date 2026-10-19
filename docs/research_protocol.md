@@ -51,3 +51,12 @@ When behavioral features are added, retain event-level `published_at`, `first_se
 3. Add timestamped causal attention sources with first-seen provenance.
 4. Build a strict chronological replay with embargoed out-of-sample evaluation.
 5. Evaluate paper trading only after independent validation; no live orders in this project.
+
+## Market-wide reproducibility
+- A research run must reference one frozen universe snapshot ID and must never silently refresh or alter that snapshot.
+- Alpaca Assets is asset discovery only. It supplies no historical liquidity ranking; any size-limited selection must use a separately supplied, explicitly named liquidity metric and document its observation period. An arbitrary subset must not be called representative.
+- The current active Alpaca universe is survivorship-biased and not point-in-time historical. Delisted/inactive symbols require an imported historical universe when available.
+- Hourly raw data is stored as immutable monthly chunks. Feed, timeframe, adjustment policy, symbol, range, checksum and status are part of chunk identity; IEX and SIP data are never silently combined.
+- Failed downloads and successfully empty periods are distinct manifest states. Missing data must remain visible and must not be treated as an economic failure or a censored label without provenance.
+- The market-wide deliverable retains every candidate outcome and reports confirmed Golden Opportunities, stops, timeouts, ambiguous/censored cases, symbol and calendar-period distributions, opportunity-window duration distributions, time to target, and corresponding failed cases.
+- Retrospective rankings use future labels and observed liquidity only for research description; they are not live signals or evidence of independent trade performance.
