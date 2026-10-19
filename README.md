@@ -11,8 +11,20 @@ pip install -e '.[dev]'
 pytest -q
 export MASSIVE_API_KEY='your_key'
 momentum-lab fetch --symbol RKLB --start 2025-01-01 --end 2025-03-31 --out data/raw/RKLB.parquet
-momentum-lab mine --input data/raw/RKLB.parquet --latency 2 --horizon-hours 60 --min-window 30 --out results/rklb
+momentum-lab mine --input data/raw/RKLB.parquet --timeframe 1m --latency 2 --horizon-hours 60 --min-window 30 --out results/rklb
 ```
+
+For hourly Alpaca bars, install the portable explorer extra and run:
+
+```bash
+pip install -e '.[dev,explorer]'
+momentum-lab mine --input data/raw/RKLB_hour.csv --timeframe 1h \
+  --target 0.20 --stop 0.08 --horizon-hours 60 --latency 2 \
+  --out results/rklb_hourly
+```
+
+This writes `candidate_outcomes.parquet`, `opportunity_windows.csv`,
+`research_summary.json`, and a local interactive `explorer.html` report.
 
 PowerShell activation: `.venv\Scripts\Activate.ps1`. API history entitlement required; use your own 1-minute CSV/Parquet if you do not have it.
 
@@ -20,10 +32,14 @@ PowerShell activation: `.venv\Scripts\Activate.ps1`. API history entitlement req
 CSV/Parquet: `ts,symbol,open,high,low,close,volume`. UTC timestamps at **start** of the 1-minute candle. `ts` must be parseable as UTC. Inputs must be adjusted consistently for corporate actions. Never put paid vendor raw data or API keys in git.
 
 ### Outputs
-- `candidate_outcomes.parquet`: each candidate minute's hindsight target/stop result.
-- `opportunity_windows.csv`: consecutive successful hindsight minutes; `gold` marks >=30 minute opportunity windows.
+- `candidate_outcomes.parquet`: one row per eligible decision, including successful and failed outcomes, exact UTC timestamps, entry delay, ambiguity, and coverage flags.
+- `opportunity_windows.csv`: correlated successful decision episodes. Hourly `gold` requires two consecutive eligible hourly decisions and is an hourly proxy, never a verified 30-minute window.
+- `research_summary.json`: aggregate counts by symbol and calendar month, duration distribution, and median time to target.
+- `explorer.html`: static interactive Plotly report with an episode selector and successful, failed, ambiguous, and censored candidates.
 
-**Do not interpret the fraction of winning candidate minutes as trade win-rate**: nearby minutes share the same future price path. Labels do not constitute entry signals.
+Hourly candles cannot resolve a two-minute execution delay. The hourly miner therefore enters at the first subsequent candle open and records the actual delay; this is a coarse research proxy, not a two-minute execution simulation. The 60-hour horizon is elapsed calendar time, including nights and weekends, while missing bars never prove that a barrier was not crossed.
+
+**Do not interpret the fraction of winning candidate minutes or hours as trade win-rate**: nearby decisions share the same future price path and are correlated observations. Labels do not constitute entry signals.
 
 ## Modules
 - `miners/golden.py`: existing v005 prototype transplanted into a package, with minute OHLC conservative ambiguity treatment.
@@ -67,4 +83,4 @@ set -a; source .env; set +a
 momentum-lab fetch-alpaca --symbol RKLB --start 2025-01-01 --end 2025-04-01 --feed iex --out data/raw/RKLB_hour.csv
 ```
 
-End time is **exclusive**. An IEX response is not consolidated whole-market volume; SIP entitlement may be required for representative bars. This adds **data collection only**: the existing `mine` command assumes 1-minute bars. Do **not** mine these hourly bars with the minute-specific miner. Next milestone: bar-size-aware retrospective miner with realistic hourly entry timing and unknown within-bar barrier ordering.
+End time is **exclusive**. An IEX response is not consolidated whole-market volume; SIP entitlement may be required for representative bars. Hourly mining uses explicit next-candle-open proxy semantics and unknown within-bar barrier ordering. It is retrospective discovery only, not a real-time signal or live trading simulation.
